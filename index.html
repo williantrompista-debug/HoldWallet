@@ -18,10 +18,47 @@
       <img src="assets/mascot.png" alt="" class="brand-icon">
       <span>HoldWallet</span>
     </a>
-    <a href="#/novo" class="btn btn-sm btn-primary">+ Pedir opinião</a>
+    <div class="topbar-right">
+      <a href="#/novo" class="btn btn-sm btn-primary">+ Pedir opinião</a>
+      <div id="auth-area" class="auth-area" hidden></div>
+    </div>
   </header>
 
   <div id="mode-banner" class="mode-banner" hidden>🧪 Modo demonstração: os dados ficam só neste aparelho.</div>
+
+  <!-- login -->
+  <div id="auth-modal" class="modal" hidden>
+    <div class="modal-card">
+      <button type="button" class="modal-close" data-auth="close" aria-label="Fechar">×</button>
+      <img src="assets/mascot.png" alt="" class="modal-mascot">
+      <h2 class="modal-title">Entre para participar</h2>
+      <p class="muted small modal-sub">Ver o mural é livre. Para votar, perguntar e pedir opinião, crie uma conta rapidinho.</p>
+
+      <button type="button" class="btn btn-google btn-block" data-auth="google">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.8 6C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.2 0 11.6-2 15.4-5.6l-7.5-5.8c-2.1 1.4-4.8 2.3-7.9 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6C6.5 42.6 14.6 48 24 48z"/></svg>
+        Entrar com Google
+      </button>
+      <div class="or"><span>ou com e-mail</span></div>
+
+      <form id="auth-form" class="form">
+        <label>Nome ou apelido <span class="opt">(como você aparece)</span>
+          <input name="nick" maxlength="30" placeholder="Ex.: Will" data-only="signup">
+        </label>
+        <label>E-mail
+          <input name="email" type="email" required autocomplete="email" placeholder="voce@exemplo.com">
+        </label>
+        <label>Senha
+          <input name="password" type="password" required minlength="6" autocomplete="current-password" placeholder="mínimo 6 caracteres">
+        </label>
+        <p class="auth-error small" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block" data-label-signin="Entrar" data-label-signup="Criar conta">Entrar</button>
+      </form>
+      <p class="small auth-switch">
+        <span data-mode="signin">Ainda não tem conta? <a href="#" class="link" data-auth="toggle">Criar conta</a></span>
+        <span data-mode="signup" hidden>Já tem conta? <a href="#" class="link" data-auth="toggle">Entrar</a></span>
+      </p>
+    </div>
+  </div>
 
   <main id="app"></main>
 

@@ -96,11 +96,22 @@ set search_path = public as $$
   select * from public.requests_with_votes where id = rid;
 $$;
 
-grant execute on function public.request_is_open(uuid)  to authenticated;
-grant execute on function public.is_request_owner(uuid) to authenticated;
-grant execute on function public.request_by_id(uuid)    to authenticated;
+-- Usuário de verdade: logado E não anônimo (mesmo que alguém ligue o login anônimo no painel).
+create or replace function public.is_real_user()
+returns boolean language sql security definer stable
+set search_path = public, auth as $$
+  select auth.uid() is not null
+     and coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) = false;
+$$;
+
+grant execute on function public.request_is_open(uuid)  to anon, authenticated;
+grant execute on function public.is_request_owner(uuid) to anon, authenticated;
+grant execute on function public.request_by_id(uuid)    to anon, authenticated;
+grant execute on function public.is_real_user()         to anon, authenticated;
 
 -- ---------- segurança (Row Level Security) ----------
+-- Ler: qualquer pessoa (mural e links compartilhados funcionam sem conta).
+-- Escrever (pedir, votar, perguntar, responder, comentar, decidir): só com conta.
 alter table public.requests  enable row level security;
 alter table public.votes     enable row level security;
 alter table public.questions enable row level security;
@@ -108,58 +119,58 @@ alter table public.comments  enable row level security;
 
 drop policy if exists "requests: ler mural ou os meus" on public.requests;
 create policy "requests: ler mural ou os meus" on public.requests
-  for select to authenticated
+  for select to anon, authenticated
   using (scope = 'mural' or owner_id = auth.uid());
 
 drop policy if exists "requests: criar o meu" on public.requests;
 create policy "requests: criar o meu" on public.requests
   for insert to authenticated
-  with check (owner_id = auth.uid());
+  with check (public.is_real_user() and owner_id = auth.uid());
 
 drop policy if exists "requests: editar o meu" on public.requests;
 create policy "requests: editar o meu" on public.requests
   for update to authenticated
   using (owner_id = auth.uid())
-  with check (owner_id = auth.uid());
+  with check (public.is_real_user() and owner_id = auth.uid());
 
 drop policy if exists "votes: ler" on public.votes;
 create policy "votes: ler" on public.votes
-  for select to authenticated using (true);
+  for select to anon, authenticated using (true);
 
 drop policy if exists "votes: votar" on public.votes;
 create policy "votes: votar" on public.votes
   for insert to authenticated
-  with check (user_id = auth.uid() and public.request_is_open(request_id));
+  with check (public.is_real_user() and user_id = auth.uid() and public.request_is_open(request_id));
 
 drop policy if exists "votes: mudar o voto" on public.votes;
 create policy "votes: mudar o voto" on public.votes
   for update to authenticated
   using (user_id = auth.uid())
-  with check (user_id = auth.uid() and public.request_is_open(request_id));
+  with check (public.is_real_user() and user_id = auth.uid() and public.request_is_open(request_id));
 
 drop policy if exists "questions: ler" on public.questions;
 create policy "questions: ler" on public.questions
-  for select to authenticated using (true);
+  for select to anon, authenticated using (true);
 
 drop policy if exists "questions: perguntar" on public.questions;
 create policy "questions: perguntar" on public.questions
   for insert to authenticated
-  with check (user_id = auth.uid());
+  with check (public.is_real_user() and user_id = auth.uid());
 
 drop policy if exists "questions: dono responde" on public.questions;
 create policy "questions: dono responde" on public.questions
   for update to authenticated
   using (public.is_request_owner(request_id))
-  with check (public.is_request_owner(request_id));
+  with check (public.is_real_user() and public.is_request_owner(request_id));
 
 drop policy if exists "comments: ler" on public.comments;
 create policy "comments: ler" on public.comments
-  for select to authenticated using (true);
+  for select to anon, authenticated using (true);
 
 drop policy if exists "comments: comentar" on public.comments;
 create policy "comments: comentar" on public.comments
   for insert to authenticated
-  with check (user_id = auth.uid());
+  with check (public.is_real_user() and user_id = auth.uid());
 
 -- ---------- tempo real ----------
 do $$

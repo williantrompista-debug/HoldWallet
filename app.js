@@ -1,7 +1,8 @@
-/* HoldWallet · v0.2
+/* HoldWallet · v0.3
  * Dois modos:
- *  - demonstração: tudo em localStorage (sem config.js preenchido)
- *  - online: Supabase (pedidos, votos, perguntas e comentários sincronizados)
+ *  - demonstração: tudo em localStorage (config.js vazio), sem login
+ *  - online: Supabase. Ler é livre; votar, pedir, perguntar, responder e comentar exigem conta
+ *    (Google ou e-mail e senha).
  */
 (() => {
   'use strict';
@@ -17,8 +18,8 @@
   const brl = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const isOpen = (r) => !r.decision && r.deadline > Date.now();
-  const getNick = () => { try { return localStorage.getItem(NICK_KEY) || ''; } catch (e) { return ''; } };
-  const setNick = (n) => { try { localStorage.setItem(NICK_KEY, n || ''); } catch (e) { /* ignore */ } };
+  const localNick = () => { try { return localStorage.getItem(NICK_KEY) || ''; } catch (e) { return ''; } };
+  const saveLocalNick = (n) => { try { localStorage.setItem(NICK_KEY, n || ''); } catch (e) { /* ignore */ } };
 
   function timeLeft(r) {
     if (r.decision) return r.decision === 'held' ? 'segurou' : 'comprou';
@@ -35,7 +36,7 @@
     t.textContent = msg;
     t.hidden = false;
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => (t.hidden = true), 2400);
+    toast._t = setTimeout(() => (t.hidden = true), 2600);
   }
 
   function pct(r) {
@@ -45,10 +46,13 @@
   }
 
   // ============================================================
-  // Store local (modo demonstração)
+  // Store local (modo demonstração, sem login)
   // ============================================================
   class LocalStore {
-    constructor() { this.KEY = 'holdwallet.v1'; this.remote = false; }
+    constructor() { this.KEY = 'holdwallet.v1'; this.remote = false; this.user = { id: 'local' }; }
+    get loggedIn() { return true; }
+    get nick() { return localNick(); }
+    async setNick(n) { saveLocalNick(n); }
     async init() {
       try { const raw = localStorage.getItem(this.KEY); if (raw) { this.db = JSON.parse(raw); return; } } catch (e) { /* ignore */ }
       this.db = { requests: this.seed() };
@@ -129,9 +133,9 @@
       r.votes[side]++; r.myVote = side; this.save();
     }
     async decide(id, decision) { const r = this.find(id); r.decision = decision; this.save(); }
-    async ask(id, text) { this.find(id).questions.push({ id: uid(), text, author: getNick() || 'Você', answer: '' }); this.save(); }
+    async ask(id, text) { this.find(id).questions.push({ id: uid(), text, author: this.nick || 'Você', answer: '' }); this.save(); }
     async answer(id, qid, text) { const q = this.find(id).questions.find((x) => x.id === qid); if (q) q.answer = text; this.save(); }
-    async comment(id, side, text) { this.find(id).comments.push({ id: uid(), side, text, author: getNick() || 'Você' }); this.save(); }
+    async comment(id, side, text) { this.find(id).comments.push({ id: uid(), side, text, author: this.nick || 'Você' }); this.save(); }
     subscribe() { return () => {}; }
     shareUrl(r) { return `${location.href.split('#')[0]}#/pedido/${r.id}?d=${encodeReq(r)}`; }
   }
@@ -143,22 +147,58 @@
   function decodeReq(s) { try { return JSON.parse(decodeURIComponent(escape(atob(s)))); } catch (e) { return null; } }
 
   // ============================================================
-  // Store remoto (Supabase)
+  // Store remoto (Supabase) + autenticação
   // ============================================================
   class RemoteStore {
     constructor() {
       this.remote = true;
       this.sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
       this.user = null;
+      this.onAuthChange = null;
     }
     async init() {
       const { data: { session } } = await this.sb.auth.getSession();
-      if (session) { this.user = session.user; return; }
-      const { data, error } = await this.sb.auth.signInAnonymously();
-      if (error) throw error;
-      this.user = data.user;
+      this.user = session ? session.user : null;
+      this.sb.auth.onAuthStateChange((event, s) => {
+        const before = this.uid;
+        this.user = s ? s.user : null;
+        if (this.uid !== before && this.onAuthChange) this.onAuthChange(event);
+      });
     }
-    get uid() { return this.user && this.user.id; }
+    get uid() { return this.user ? this.user.id : null; }
+    get loggedIn() { return !!this.user; }
+    get nick() {
+      const m = (this.user && this.user.user_metadata) || {};
+      const fromEmail = this.user && this.user.email ? this.user.email.split('@')[0] : '';
+      return m.nick || m.full_name || m.name || fromEmail || localNick();
+    }
+    async setNick(n) {
+      saveLocalNick(n);
+      if (this.user && n && n !== this.nick) {
+        const { error } = await this.sb.auth.updateUser({ data: { nick: n } });
+        if (error) console.warn(error);
+      }
+    }
+    // --- auth ---
+    async signInWithGoogle() {
+      const { error } = await this.sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: location.href.split('#')[0] },
+      });
+      if (error) this.fail(error);
+    }
+    async signInWithEmail(email, password) {
+      const { error } = await this.sb.auth.signInWithPassword({ email, password });
+      if (error) this.fail(error);
+    }
+    async signUpWithEmail(email, password, nick) {
+      const { data, error } = await this.sb.auth.signUp({ email, password, options: { data: { nick } } });
+      if (error) this.fail(error);
+      // sem sessão = o projeto exige confirmação por e-mail
+      return !!(data && data.session);
+    }
+    async signOut() { await this.sb.auth.signOut(); }
+
     toReq(row, extra = {}) {
       return {
         id: row.id,
@@ -179,7 +219,21 @@
         ...extra,
       };
     }
-    fail(error) { console.error(error); throw new Error(error.message || 'Erro ao falar com o servidor'); }
+    fail(error) {
+      console.error(error);
+      const msg = String(error.message || '');
+      const map = [
+        [/invalid login credentials/i, 'E-mail ou senha incorretos.'],
+        [/email not confirmed/i, 'Confirme seu e-mail antes de entrar (veja a caixa de entrada).'],
+        [/user already registered/i, 'Esse e-mail já tem conta. Tente entrar.'],
+        [/password should be at least/i, 'A senha precisa ter pelo menos 6 caracteres.'],
+        [/rate limit|too many requests/i, 'Muitas tentativas. Espere um pouco e tente de novo.'],
+        [/row-level security/i, 'Você precisa estar logado para fazer isso.'],
+        [/failed to fetch|network/i, 'Sem conexão com o servidor.'],
+      ];
+      const hit = map.find(([re]) => re.test(msg));
+      throw new Error(hit ? hit[1] : (msg || 'Erro ao falar com o servidor'));
+    }
     async listMural(f) {
       const now = new Date().toISOString();
       let q = this.sb.from('requests_with_votes').select('*').eq('scope', 'mural');
@@ -191,6 +245,7 @@
       return data.map((row) => this.toReq(row));
     }
     async listMine() {
+      if (!this.uid) return [];
       const { data, error } = await this.sb.from('requests_with_votes').select('*').eq('owner_id', this.uid).order('created_at', { ascending: false });
       if (error) this.fail(error);
       return data.map((row) => this.toReq(row));
@@ -200,7 +255,7 @@
       if (error) this.fail(error);
       if (!rows || !rows.length) return null;
       const [mine, qs, cs] = await Promise.all([
-        this.sb.from('votes').select('side').eq('request_id', id).eq('user_id', this.uid).maybeSingle(),
+        this.uid ? this.sb.from('votes').select('side').eq('request_id', id).eq('user_id', this.uid).maybeSingle() : Promise.resolve({ data: null }),
         this.sb.from('questions').select('*').eq('request_id', id).order('created_at'),
         this.sb.from('comments').select('*').eq('request_id', id).order('created_at'),
       ]);
@@ -228,7 +283,7 @@
       if (error) this.fail(error);
     }
     async ask(id, text) {
-      const { error } = await this.sb.from('questions').insert({ request_id: id, user_id: this.uid, author: getNick() || 'Anônimo', text });
+      const { error } = await this.sb.from('questions').insert({ request_id: id, user_id: this.uid, author: this.nick || 'Anônimo', text });
       if (error) this.fail(error);
     }
     async answer(id, qid, text) {
@@ -236,7 +291,7 @@
       if (error) this.fail(error);
     }
     async comment(id, side, text) {
-      const { error } = await this.sb.from('comments').insert({ request_id: id, user_id: this.uid, author: getNick() || 'Anônimo', side, text });
+      const { error } = await this.sb.from('comments').insert({ request_id: id, user_id: this.uid, author: this.nick || 'Anônimo', side, text });
       if (error) this.fail(error);
     }
     subscribe(id, cb) {
@@ -256,6 +311,97 @@
   const app = $('#app');
   const tpl = (id) => document.importNode($(`#${id}`).content, true);
   let store;
+
+  // ---------- login (modal) ----------
+  const modal = $('#auth-modal');
+  const authForm = $('#auth-form');
+  let authMode = 'signin';
+  let afterLogin = null;
+
+  function paintAuthMode() {
+    $$('[data-mode]', modal).forEach((el) => (el.hidden = el.dataset.mode !== authMode));
+    $('[data-only="signup"]', modal).closest('label').hidden = authMode !== 'signup';
+    const btn = $('button[type=submit]', authForm);
+    btn.textContent = authMode === 'signup' ? btn.dataset.labelSignup : btn.dataset.labelSignin;
+    authForm.password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
+    $('.auth-error', modal).hidden = true;
+  }
+  function openAuth(next) {
+    afterLogin = typeof next === 'function' ? next : null;
+    authMode = 'signin';
+    paintAuthMode();
+    modal.hidden = false;
+    setTimeout(() => authForm.email.focus(), 50);
+  }
+  function closeAuth() { modal.hidden = true; afterLogin = null; }
+  function authError(msg) { const e = $('.auth-error', modal); e.textContent = msg; e.hidden = false; }
+
+  modal.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-auth]');
+    if (e.target === modal) { closeAuth(); return; }
+    if (!t) return;
+    e.preventDefault();
+    if (t.dataset.auth === 'close') closeAuth();
+    if (t.dataset.auth === 'toggle') { authMode = authMode === 'signin' ? 'signup' : 'signin'; paintAuthMode(); }
+    if (t.dataset.auth === 'google') store.signInWithGoogle().catch((err) => authError(err.message));
+  });
+  authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('button[type=submit]', authForm);
+    const email = authForm.email.value.trim();
+    const password = authForm.password.value;
+    const nick = authForm.nick.value.trim();
+    btn.disabled = true;
+    try {
+      if (authMode === 'signup') {
+        const hasSession = await store.signUpWithEmail(email, password, nick || email.split('@')[0]);
+        if (!hasSession) {
+          authError('Conta criada! Confirme pelo link que mandamos no seu e-mail e depois entre.');
+          authMode = 'signin'; paintAuthMode();
+          authError('Conta criada! Confirme pelo link que mandamos no seu e-mail e depois entre.');
+          return;
+        }
+      } else {
+        await store.signInWithEmail(email, password);
+      }
+      toast(`Bem-vindo, ${store.nick}!`);
+      const next = afterLogin;
+      closeAuth();
+      if (next) next();
+    } catch (err) {
+      authError(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Exige login para ações. Em modo demonstração não há login.
+  function requireAuth(next) {
+    if (!store.remote || store.loggedIn) return true;
+    openAuth(next);
+    return false;
+  }
+
+  function paintAuthArea() {
+    const area = $('#auth-area');
+    if (!store.remote) { area.hidden = true; return; }
+    area.hidden = false;
+    if (store.loggedIn) {
+      area.innerHTML = `<span class="nick" title="${esc(store.user.email || '')}">${esc(store.nick)}</span><button type="button" class="btn btn-ghost" data-action="logout">Sair</button>`;
+      $('[data-action="logout"]', area).addEventListener('click', async () => { await store.signOut(); toast('Até mais!'); });
+    } else {
+      area.innerHTML = '<button type="button" class="btn btn-ghost" data-action="login">Entrar</button>';
+      $('[data-action="login"]', area).addEventListener('click', () => openAuth());
+    }
+  }
+
+  function loginCta(msg) {
+    const d = document.createElement('section');
+    d.className = 'section';
+    d.innerHTML = `<div class="login-cta"><img src="assets/mascot.png" alt=""><h2>${msg}</h2><p class="muted small">Ver o mural é livre. Para participar, entre ou crie uma conta.</p><button type="button" class="btn btn-primary btn-lg">Entrar ou criar conta</button></div>`;
+    $('button', d).addEventListener('click', () => openAuth(() => route()));
+    return d;
+  }
 
   function shareText(r) {
     const owns = r.owns ? `\nJá tenho: ${r.owns}` : '';
@@ -314,17 +460,19 @@
     },
 
     async novo() {
+      if (store.remote && !store.loggedIn) return loginCta('Entre para pedir opinião');
       const n = tpl('tpl-novo');
       const form = $('#form-novo', n);
-      form.author.value = getNick();
+      form.author.value = store.nick;
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (!requireAuth(() => route())) return;
         const btn = $('button[type=submit]', form);
         btn.disabled = true;
         try {
           const f = new FormData(form);
-          const author = (f.get('author') || '').trim() || 'Anônimo';
-          setNick(author === 'Anônimo' ? '' : author);
+          const author = (f.get('author') || '').trim() || store.nick || 'Anônimo';
+          await store.setNick(author === 'Anônimo' ? '' : author);
           const id = await store.create({
             item: f.get('item').trim(),
             price: Number(f.get('price')),
@@ -366,6 +514,7 @@
     },
 
     async meus() {
+      if (store.remote && !store.loggedIn) return loginCta('Entre para ver seus pedidos');
       const n = tpl('tpl-meus');
       const mine = await store.listMine();
       fillStats(n, statsOf(mine));
@@ -376,8 +525,8 @@
     async como() {
       const n = tpl('tpl-como');
       $('.mode-note', n).textContent = store.remote
-        ? 'HoldWallet · v0.2 · online: votos, perguntas e comentários sincronizados entre aparelhos.'
-        : 'HoldWallet · v0.2 · modo demonstração: os dados ficam salvos só neste aparelho.';
+        ? 'HoldWallet · v0.3 · online. Ver é livre; votar, perguntar e pedir opinião exigem conta.'
+        : 'HoldWallet · v0.3 · modo demonstração: os dados ficam salvos só neste aparelho.';
       return n;
     },
 
@@ -394,6 +543,7 @@
       const root = $('.detail', n);
       const busy = (fn) => async (...a) => { try { await fn(...a); } catch (err) { toast('Não deu: ' + err.message); } };
       const reload = async () => { const fresh = await store.get(id); if (fresh) { r = fresh; paintAll(); } };
+      const guard = () => requireAuth(() => route());
 
       // cabeçalho (não muda)
       $('.detail-price', root).textContent = brl(r.price);
@@ -422,11 +572,13 @@
         $('.c-hold', root).textContent = `✋ Segura ${p.h}% (${r.votes.hold})`;
         $$('[data-vote]', root).forEach((b) => { b.classList.toggle('chosen', r.myVote === b.dataset.vote); b.disabled = closed; });
         $('.vote-note', root).textContent = closed ? 'Votação encerrada.'
+          : (store.remote && !store.loggedIn) ? 'Entre para votar. Seu voto não compra nada.'
           : r.myVote ? 'Seu voto foi registrado. Toque de novo para mudar.'
           : r.mine ? 'Você também pode votar no seu próprio pedido, mas sem trapaça, hein?'
-          : 'Seu voto é anônimo e não compra nada.';
+          : 'Um voto por pessoa. Votar não compra nada.';
       };
       $$('[data-vote]', root).forEach((b) => b.addEventListener('click', busy(async () => {
+        if (!guard()) return;
         const v = b.dataset.vote;
         if (r.myVote === v) return;
         await store.vote(id, v);
@@ -459,6 +611,7 @@
         }
       };
       $$('[data-decide]', root).forEach((b) => b.addEventListener('click', busy(async () => {
+        if (!guard()) return;
         await store.decide(id, b.dataset.decide);
         r.decision = b.dataset.decide;
         paintDecision(); paintVotes();
@@ -482,6 +635,7 @@
         });
         $$('.form-answer', qList).forEach((f) => f.addEventListener('submit', busy(async (e) => {
           e.preventDefault();
+          if (!guard()) return;
           const a = f.answer.value.trim();
           if (!a) return;
           await store.answer(id, f.dataset.qid, a);
@@ -494,6 +648,7 @@
       $$('.qa-suggest .chip', root).forEach((c) => c.addEventListener('click', () => { qForm.text.value = c.dataset.q; qForm.text.focus(); }));
       qForm.addEventListener('submit', busy(async (e) => {
         e.preventDefault();
+        if (!guard()) return;
         const text = qForm.text.value.trim();
         if (!text) return;
         await store.ask(id, text);
@@ -516,6 +671,7 @@
       };
       $('.form-comment', root).addEventListener('submit', busy(async (e) => {
         e.preventDefault();
+        if (!guard()) return;
         const f = e.target;
         const text = f.text.value.trim();
         if (!text) return;
@@ -587,7 +743,13 @@
         await store.init();
       }
     }
+    if (store.remote) {
+      store.onAuthChange = () => { paintAuthArea(); route(); };
+      // limpa o "?code=..." que o login com Google deixa na URL
+      if (/[?&]code=/.test(location.search)) history.replaceState(null, '', location.pathname + location.hash);
+    }
     $('#mode-banner').hidden = store.remote;
+    paintAuthArea();
     window.addEventListener('hashchange', route);
     await route();
   }
