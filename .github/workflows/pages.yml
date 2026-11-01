@@ -20,7 +20,7 @@ jobs:
       - name: Monta a pasta do site
         run: |
           mkdir -p _site
-          cp -r index.html styles.css app.js sw.js manifest.json assets _site/
+          cp -r index.html styles.css app.js config.js sw.js manifest.json assets _site/
           touch _site/.nojekyll
       - uses: peaceiris/actions-gh-pages@v4
         with:
