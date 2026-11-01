@@ -295,7 +295,8 @@
       if (error) this.fail(error);
     }
     subscribe(id, cb) {
-      const ch = this.sb.channel(`pedido-${id}`);
+      // nome único por tela: a biblioteca reaproveita canais com o mesmo nome
+      const ch = this.sb.channel(`pedido-${id}-${uid()}`);
       ['votes', 'questions', 'comments'].forEach((table) =>
         ch.on('postgres_changes', { event: '*', schema: 'public', table, filter: `request_id=eq.${id}` }, cb));
       ch.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'requests', filter: `id=eq.${id}` }, cb);
@@ -316,7 +317,6 @@
   const modal = $('#auth-modal');
   const authForm = $('#auth-form');
   let authMode = 'signin';
-  let afterLogin = null;
 
   function paintAuthMode() {
     $$('[data-mode]', modal).forEach((el) => (el.hidden = el.dataset.mode !== authMode));
@@ -326,14 +326,13 @@
     authForm.password.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
     $('.auth-error', modal).hidden = true;
   }
-  function openAuth(next) {
-    afterLogin = typeof next === 'function' ? next : null;
+  function openAuth() {
     authMode = 'signin';
     paintAuthMode();
     modal.hidden = false;
     setTimeout(() => authForm.email.focus(), 50);
   }
-  function closeAuth() { modal.hidden = true; afterLogin = null; }
+  function closeAuth() { modal.hidden = true; }
   function authError(msg) { const e = $('.auth-error', modal); e.textContent = msg; e.hidden = false; }
 
   modal.addEventListener('click', (e) => {
@@ -364,10 +363,9 @@
       } else {
         await store.signInWithEmail(email, password);
       }
+      // ao entrar, onAuthChange recarrega a tela atual (uma vez só)
       toast(`Bem-vindo, ${store.nick}!`);
-      const next = afterLogin;
       closeAuth();
-      if (next) next();
     } catch (err) {
       authError(err.message);
     } finally {
@@ -376,9 +374,9 @@
   });
 
   // Exige login para ações. Em modo demonstração não há login.
-  function requireAuth(next) {
+  function requireAuth() {
     if (!store.remote || store.loggedIn) return true;
-    openAuth(next);
+    openAuth();
     return false;
   }
 
@@ -399,7 +397,7 @@
     const d = document.createElement('section');
     d.className = 'section';
     d.innerHTML = `<div class="login-cta"><img src="assets/mascot.png" alt=""><h2>${msg}</h2><p class="muted small">Ver o mural é livre. Para participar, entre ou crie uma conta.</p><button type="button" class="btn btn-primary btn-lg">Entrar ou criar conta</button></div>`;
-    $('button', d).addEventListener('click', () => openAuth(() => route()));
+    $('button', d).addEventListener('click', () => openAuth());
     return d;
   }
 
@@ -466,7 +464,7 @@
       form.author.value = store.nick;
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (!requireAuth(() => route())) return;
+        if (!requireAuth()) return;
         const btn = $('button[type=submit]', form);
         btn.disabled = true;
         try {
@@ -543,7 +541,7 @@
       const root = $('.detail', n);
       const busy = (fn) => async (...a) => { try { await fn(...a); } catch (err) { toast('Não deu: ' + err.message); } };
       const reload = async () => { const fresh = await store.get(id); if (fresh) { r = fresh; paintAll(); } };
-      const guard = () => requireAuth(() => route());
+      const guard = () => requireAuth();
 
       // cabeçalho (não muda)
       $('.detail-price', root).textContent = brl(r.price);
@@ -714,7 +712,10 @@
     app.innerHTML = '<div class="loading">carregando…</div>';
     try {
       const view = await viewFn();
-      if (seq !== routeSeq) return; // o usuário já navegou para outra tela
+      if (seq !== routeSeq) { // o usuário já navegou: descarta esta tela e fecha o que ela abriu
+        $$('.detail', view).forEach((el) => el.dispatchEvent(new Event('hw:leave')));
+        return;
+      }
       app.innerHTML = '';
       app.appendChild(view);
     } catch (err) {
