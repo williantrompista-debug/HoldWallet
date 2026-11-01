@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fffdf7">
+  <meta name="description" content="HoldWallet: segura a carteira e deixa a galera votar antes de você comprar.">
+  <title>HoldWallet · Segura a carteira</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/icon.png">
+  <link rel="apple-touch-icon" href="assets/icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a href="#/" class="brand">
+      <img src="assets/mascot.png" alt="" class="brand-icon">
+      <span>HoldWallet</span>
+    </a>
+    <a href="#/novo" class="btn btn-sm btn-primary">+ Pedir opinião</a>
+  </header>
+
+  <main id="app"></main>
+
+  <nav class="tabbar">
+    <a href="#/" data-tab="home"><span class="ico">🏠</span>Início</a>
+    <a href="#/mural" data-tab="mural"><span class="ico">🗳️</span>Mural</a>
+    <a href="#/novo" data-tab="novo" class="tab-main"><span class="ico">＋</span></a>
+    <a href="#/meus" data-tab="meus"><span class="ico">👛</span>Meus</a>
+    <a href="#/como-funciona" data-tab="como"><span class="ico">❓</span>Ajuda</a>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- ============ TEMPLATES ============ -->
+
+  <template id="tpl-home">
+    <section class="hero">
+      <img src="assets/mascot.png" alt="Mascote do HoldWallet" class="hero-mascot">
+      <h1>Segura a carteira.<br>Deixa a galera decidir.</h1>
+      <p class="lead">Antes de gastar, conta o que você quer comprar, quanto custa e por quê. Amigos ou estranhos votam: <b>Compra</b> ou <b>Segura</b>. A decisão final continua sendo sua.</p>
+      <div class="hero-actions">
+        <a href="#/novo" class="btn btn-primary btn-lg">Pedir opinião agora</a>
+        <a href="#/mural" class="btn btn-ghost btn-lg">Ver o mural</a>
+      </div>
+      <p class="hint">💡 O tempo ideal para esfriar um impulso de compra é <b>24 horas</b>. Cadastra, dorme e decide amanhã.</p>
+    </section>
+
+    <section class="stats-row">
+      <div class="stat">
+        <span class="stat-value" data-stat="saved">R$ 0</span>
+        <span class="stat-label">você já segurou</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" data-stat="open">0</span>
+        <span class="stat-label">pedidos abertos</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" data-stat="votes">0</span>
+        <span class="stat-label">votos recebidos</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Como funciona</h2>
+      <ol class="steps">
+        <li><span class="step-n">1</span><div><b>Cadastra a compra</b><br>Item, preço e motivo. Foto e alternativas são opcionais.</div></li>
+        <li><span class="step-n">2</span><div><b>Manda pro grupo ou pro mural</b><br>Compartilha no WhatsApp ou publica para estranhos votarem.</div></li>
+        <li><span class="step-n">3</span><div><b>Lê os argumentos e decide</b><br>Votar não compra nada e não cobra nada. Só opinião.</div></li>
+      </ol>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Rolando no mural</h2>
+        <a href="#/mural" class="link">ver tudo →</a>
+      </div>
+      <div id="home-feed" class="cards"></div>
+    </section>
+  </template>
+
+  <template id="tpl-novo">
+    <section class="section">
+      <h1>Compro ou seguro?</h1>
+      <p class="lead">Descreve a compra. Quanto mais contexto, melhor a opinião que você recebe.</p>
+
+      <form id="form-novo" class="form">
+        <label>O que você quer comprar? <span class="req">*</span>
+          <input name="item" required maxlength="80" placeholder="Ex.: iPhone 17, tênis de corrida, air fryer…">
+        </label>
+
+        <label>Preço (R$) <span class="req">*</span>
+          <input name="price" type="number" inputmode="decimal" min="0" step="0.01" required placeholder="0,00">
+        </label>
+
+        <label>Por que você quer? <span class="req">*</span>
+          <textarea name="reason" required maxlength="500" rows="3" placeholder="Ex.: Meu celular trava, uso pra trabalhar e estou cansado disso…"></textarea>
+        </label>
+
+        <label>O que você já tem parecido? <span class="opt">(opcional, mas ajuda muito)</span>
+          <input name="owns" maxlength="160" placeholder="Ex.: iPhone 16, 1 ano de uso, funciona bem">
+          <small class="field-hint">Quem vota não conhece sua situação. Conta o que você já tem hoje para a opinião ser justa.</small>
+        </label>
+
+        <label>Alternativa que você já pensou <span class="opt">(opcional)</span>
+          <input name="alternative" maxlength="120" placeholder="Ex.: Trocar só a bateria por R$ 300">
+        </label>
+
+        <label>Link ou foto do produto <span class="opt">(opcional)</span>
+          <input name="imageUrl" type="url" placeholder="https://…">
+        </label>
+
+        <label>Seu apelido <span class="opt">(opcional)</span>
+          <input name="author" maxlength="30" placeholder="Como quer aparecer no mural">
+        </label>
+
+        <fieldset class="choice">
+          <legend>Quem vai votar?</legend>
+          <label class="choice-item"><input type="radio" name="scope" value="mural" checked> <span><b>Mural público</b><br><small>Qualquer pessoa pode opinar</small></span></label>
+          <label class="choice-item"><input type="radio" name="scope" value="amigos"> <span><b>Só quem tiver o link</b><br><small>Você compartilha no WhatsApp</small></span></label>
+        </fieldset>
+
+        <label>Prazo para decidir
+          <select name="hours">
+            <option value="24" selected>24 horas (recomendado)</option>
+            <option value="6">6 horas</option>
+            <option value="72">3 dias</option>
+            <option value="168">1 semana</option>
+          </select>
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-block">Abrir votação</button>
+        <p class="hint small">Votar não compra nada nem mexe no seu dinheiro. Não publique dados pessoais ou comprovantes.</p>
+      </form>
+    </section>
+  </template>
+
+  <template id="tpl-mural">
+    <section class="section">
+      <div class="section-head">
+        <h1>Mural</h1>
+        <div class="filters" id="mural-filters">
+          <button data-f="open" class="chip active">Abertos</button>
+          <button data-f="hot" class="chip">Mais votados</button>
+          <button data-f="done" class="chip">Decididos</button>
+        </div>
+      </div>
+      <div id="mural-feed" class="cards"></div>
+    </section>
+  </template>
+
+  <template id="tpl-meus">
+    <section class="section">
+      <h1>Minha carteira</h1>
+      <div class="savings-card">
+        <span class="savings-label">Você já deixou de gastar</span>
+        <span class="savings-value" data-stat="saved">R$ 0</span>
+        <span class="savings-sub"><span data-stat="held">0</span> compras seguradas · <span data-stat="bought">0</span> aprovadas</span>
+      </div>
+      <h2>Meus pedidos</h2>
+      <div id="meus-feed" class="cards"></div>
+    </section>
+  </template>
+
+  <template id="tpl-como">
+    <section class="section prose">
+      <h1>Como funciona</h1>
+      <h3>1. Cadastre a compra</h3>
+      <p>Diga o que quer comprar, o preço e o motivo. Se já pensou numa alternativa mais barata, coloque também. Isso ajuda quem vai opinar.</p>
+      <h3>2. Peça opinião</h3>
+      <p>Você pode publicar no <b>mural</b>, onde qualquer pessoa vota, ou mandar o link só para os amigos no WhatsApp.</p>
+      <h3>3. Espere o prazo</h3>
+      <p>O padrão é 24 horas. É o tempo que a cabeça leva para esfriar depois do impulso. Enquanto isso, a galera vota <b>Compra</b> ou <b>Segura</b> e comenta.</p>
+      <h3>4. Decida</h3>
+      <p>No fim, você marca se comprou ou segurou. Cada compra segurada entra no seu contador de economia.</p>
+
+      <h2>Perguntas rápidas</h2>
+      <h3>É de graça?</h3>
+      <p>Sim. O preço que você informa é só o valor da compra em discussão, nada é cobrado por aqui.</p>
+      <h3>Votar compra alguma coisa?</h3>
+      <p>Não. Votos e comentários são só opinião. Ninguém faz pedido nem mexe no seu dinheiro.</p>
+      <h3>O que não publicar?</h3>
+      <p>Telefone, endereço, comprovantes ou qualquer dado pessoal. O mural é público.</p>
+      <h3>E quem decide?</h3>
+      <p>Você. Sempre.</p>
+
+      <p class="muted small">HoldWallet · protótipo v0.1 · os dados ficam salvos só neste aparelho por enquanto.</p>
+    </section>
+  </template>
+
+  <template id="tpl-card">
+    <article class="card" data-id="">
+      <div class="card-top">
+        <span class="card-price"></span>
+        <span class="card-time"></span>
+      </div>
+      <h3 class="card-item"></h3>
+      <p class="card-reason"></p>
+      <div class="card-bar"><span class="bar-buy"></span><span class="bar-hold"></span></div>
+      <div class="card-foot">
+        <span class="card-votes"></span>
+        <span class="card-badge"></span>
+      </div>
+    </article>
+  </template>
+
+  <template id="tpl-detalhe">
+    <section class="section detail">
+      <a href="#/mural" class="link back">← voltar</a>
+      <div class="detail-top">
+        <span class="card-price detail-price"></span>
+        <span class="card-time detail-time"></span>
+      </div>
+      <h1 class="detail-item"></h1>
+      <p class="detail-author muted small"></p>
+      <div class="detail-img" hidden><img alt=""></div>
+
+      <div class="detail-block">
+        <h4>Por que quer comprar</h4>
+        <p class="detail-reason"></p>
+      </div>
+      <div class="detail-block detail-owns">
+        <h4>O que já tem hoje</h4>
+        <p class="detail-owns-text"></p>
+      </div>
+      <div class="detail-block detail-alt" hidden>
+        <h4>Alternativa pensada</h4>
+        <p class="detail-alternative"></p>
+      </div>
+
+      <div class="qa-box">
+        <h4>Perguntas antes de votar</h4>
+        <p class="muted small qa-intro">Falta contexto? Pergunta pra pessoa antes de decidir. Ela responde aqui mesmo.</p>
+        <div class="qa-suggest">
+          <button type="button" class="chip" data-q="O que você usa hoje no lugar disso?">O que você usa hoje?</button>
+          <button type="button" class="chip" data-q="Por que você precisa tanto disso agora?">Por que precisa tanto?</button>
+          <button type="button" class="chip" data-q="Cabe no seu orçamento do mês sem parcelar?">Cabe no orçamento?</button>
+          <button type="button" class="chip" data-q="Já pesquisou o preço em outros lugares?">Pesquisou o preço?</button>
+        </div>
+        <form class="form-question">
+          <input name="text" maxlength="200" placeholder="Faça uma pergunta…" required>
+          <button type="submit" class="btn btn-primary btn-sm">Perguntar</button>
+        </form>
+        <ul class="questions"></ul>
+      </div>
+
+      <div class="vote-box">
+        <div class="card-bar big"><span class="bar-buy"></span><span class="bar-hold"></span></div>
+        <div class="vote-counts"><span class="c-buy"></span><span class="c-hold"></span></div>
+        <div class="vote-buttons">
+          <button class="btn btn-buy" data-vote="buy">🛒 Compra!</button>
+          <button class="btn btn-hold" data-vote="hold">✋ Segura!</button>
+        </div>
+        <p class="vote-note muted small"></p>
+      </div>
+
+      <div class="share-row">
+        <button class="btn btn-ghost" data-action="whatsapp">📲 Mandar no WhatsApp</button>
+        <button class="btn btn-ghost" data-action="copy">🔗 Copiar link</button>
+      </div>
+
+      <div class="decide-box" hidden>
+        <h4>E aí, o que você decidiu?</h4>
+        <div class="vote-buttons">
+          <button class="btn btn-buy" data-decide="bought">Comprei</button>
+          <button class="btn btn-hold" data-decide="held">Segurei</button>
+        </div>
+      </div>
+      <div class="decided-banner" hidden></div>
+
+      <h4 class="comments-title">Argumentos</h4>
+      <form class="form-comment">
+        <select name="side">
+          <option value="buy">🛒 A favor</option>
+          <option value="hold">✋ Contra</option>
+        </select>
+        <input name="text" maxlength="280" placeholder="Dá seu pitaco…" required>
+        <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+      </form>
+      <ul class="comments"></ul>
+    </section>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
