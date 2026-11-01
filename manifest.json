@@ -1,0 +1,14 @@
+{
+  "name": "HoldWallet",
+  "short_name": "HoldWallet",
+  "description": "Segura a carteira e deixa a galera votar antes de você comprar.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fffdf7",
+  "theme_color": "#23694e",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "assets/icon.png", "sizes": "200x200", "type": "image/png", "purpose": "any" }
+  ]
+}
