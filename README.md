@@ -30,14 +30,27 @@ Cada push na branch `main` publica automaticamente no GitHub Pages (branch `gh-p
 - Instalável (PWA) com cache offline básico
 - Dados de exemplo para o mural não nascer vazio
 
-## Limitações do protótipo
+## Dois modos de funcionamento
 
-- Tudo fica salvo no `localStorage` do aparelho. Votos de outras pessoas **não sincronizam** ainda.
-- O link compartilhado carrega o pedido dentro da própria URL, então quem abre consegue ver e votar localmente, mas o voto não volta para o dono.
+| Modo | Quando | Onde ficam os dados |
+|---|---|---|
+| **Demonstração** | `config.js` vazio | Só no aparelho (`localStorage`). O link compartilhado leva o pedido na própria URL, mas os votos não voltam para o dono |
+| **Online** | `config.js` com as chaves do Supabase | No banco. Votos, perguntas e comentários sincronizam entre aparelhos e atualizam em tempo real |
+
+## Ligando o modo online (Supabase, grátis)
+
+1. Crie uma conta e um projeto em https://supabase.com (plano Free).
+2. No projeto, abra **SQL Editor**, cole o conteúdo de `supabase/schema.sql` e clique em **Run**.
+3. (Opcional) Rode também `supabase/seed.sql` para o mural já nascer com exemplos.
+4. Em **Authentication → Sign In / Providers**, ative **Anonymous sign-ins**. É assim que cada aparelho ganha uma identidade sem cadastro.
+5. Em **Project Settings → API**, copie a **Project URL** e a chave **anon / publishable** e cole em `config.js`.
+6. Faça o push. O site publicado passa a usar o banco.
+
+Como funciona a segurança: cada pessoa vota uma vez por pedido, só o dono pode decidir e responder perguntas, pedidos "só com link" não aparecem no mural, e nada pode ser alterado depois do prazo. As regras estão em `supabase/schema.sql` (RLS).
 
 ## Próximos passos
 
-1. Backend (Supabase ou Firebase): pedidos, votos e comentários sincronizados, login por Google/e-mail
+1. Login com Google (para a pessoa manter os pedidos ao trocar de aparelho)
 2. Moderação do mural e denúncia de conteúdo
 3. Notificação quando o prazo acabar
 4. "Adivinha o preço": minijogo para engajamento

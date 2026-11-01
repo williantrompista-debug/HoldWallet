@@ -21,6 +21,8 @@
     <a href="#/novo" class="btn btn-sm btn-primary">+ Pedir opinião</a>
   </header>
 
+  <div id="mode-banner" class="mode-banner" hidden>🧪 Modo demonstração: os dados ficam só neste aparelho.</div>
+
   <main id="app"></main>
 
   <nav class="tabbar">
@@ -185,7 +187,7 @@
       <h3>E quem decide?</h3>
       <p>Você. Sempre.</p>
 
-      <p class="muted small">HoldWallet · protótipo v0.1 · os dados ficam salvos só neste aparelho por enquanto.</p>
+      <p class="muted small mode-note"></p>
     </section>
   </template>
 
@@ -282,6 +284,8 @@
     </section>
   </template>
 
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <script src="app.js"></script>
 </body>
 </html>
