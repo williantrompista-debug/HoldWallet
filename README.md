@@ -4,7 +4,7 @@
 
 Antes de gastar, você cadastra o que quer comprar, o preço e o motivo. Amigos (pelo WhatsApp) ou estranhos (no mural) votam **Compra** ou **Segura** e deixam argumentos. Depois de 24 horas você decide, e cada compra segurada entra no seu contador de economia.
 
-**Testar no celular:** https://williantrompista-debug.github.io/holdwallet/
+**Testar no celular:** https://williantrompista-debug.github.io/HoldWallet/
 
 No celular, use "Adicionar à tela inicial" para instalar como app.
 
